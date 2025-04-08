@@ -1,0 +1,31 @@
+# Terraform state
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfstate.lock.info
+.cruft.json
+.terraform.lock.hcl
+
+# Sensitive files
+*.tfvars
+*.tfvars.json
+*.env
+*.json
+
+# GCP credentials (never commit service account keys)
+application_default_credentials.json
+credentials.json
+
+# Cloud Function build artifact
+function-source.zip
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Editor / system files
+*.swp
+*.bak
+.DS_Store
+.idea/
+.vscode/

@@ -27,6 +27,8 @@ resource "google_cloudfunctions_function" "csv_reports_processor" {
   source_archive_object = google_storage_bucket_object.function_source.name
   entry_point           = "process_csv"
 
+  service_account_email = "investflow-function@${var.project_id}.iam.gserviceaccount.com"
+
   event_trigger {
     event_type = "google.storage.object.finalize"
     resource   = google_storage_bucket.csv_reports_bucket.name
