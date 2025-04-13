@@ -1,2 +1,7 @@
-google-cloud-storage
-functions-framework
+google-auth==2.38.0
+google-cloud-storage==3.0.0
+gspread==6.0.0
+oauth2client==4.1.3
+pandas==2.2.3
+python-dotenv==0.21.0
+requests==2.26.0
