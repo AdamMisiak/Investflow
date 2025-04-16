@@ -5,5 +5,5 @@ output "bucket_name" {
 
 output "function_name" {
   description = "Name of the deployed cloud function"
-  value       = google_cloudfunctions_function.csv_reports_processor.name
+  value       = google_cloudfunctions2_function.csv_reports_processor.name
 }

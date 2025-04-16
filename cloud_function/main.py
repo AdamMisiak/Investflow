@@ -1,8 +1,7 @@
 import os
 from os.path import basename
-
 from dotenv import load_dotenv
-load_dotenv()  # Load environment variables if running locally or in some setups
+load_dotenv()
 
 from utils.logger import logger
 from parsers.multi_section_parser import parse_multi_section_csv
@@ -10,7 +9,10 @@ from parsers.trade_parser import parse_trades_df
 from services.sheets_service import write_to_google_sheets
 from services.slack_service import send_slack_message
 
-CSV_FILE = os.getenv("CSV_FILE")  # e.g. "some_report.csv"
+# Environment variables
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+CSV_FILE = os.getenv("CSV_FILE")  # For local testing
+BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 def process_csv(file_path):
     sections = parse_multi_section_csv(file_path)
@@ -33,7 +35,6 @@ def process_csv(file_path):
         "options_inserted": 0
     }
 
-
     for tsec in trade_sections:
         df_sec = sections[tsec]
         if first_section:
@@ -49,24 +50,54 @@ def process_csv(file_path):
     #     write_to_google_sheets(all_tx)
 
     # Slack message
-    msg = (
-        f"*📄 CSV File:* `{basename(file_path)}`\n\n"
-        f"*🔍 Records Processed:*\n"
-        f"• Stocks: `{counters['stocks_processed']}`\n"
-        f"• Options: `{counters['options_processed']}`\n"
-        f"• Total: `{counters['stocks_processed'] + counters['options_processed']}`\n\n"
-        f"*🆕 New Records Added:*\n"
-        f"• Stocks: `{counters['stocks_inserted']}`\n"
-        f"• Options: `{counters['options_inserted']}`\n"
-        f"• Total: `{counters['stocks_inserted'] + counters['options_inserted']}`\n\n"
-        f"*🔗 Supabase:* <https://supabase.com/dashboard/project/uxpqahwmqpkgqlpzwmof/editor|View in Supabase>"
-    )
-    send_slack_message(msg)
-    logger.info(msg)
+    if SLACK_WEBHOOK_URL:
+        msg = (
+            f"*📄 CSV File:* `{basename(file_path)}`\n\n"
+            f"*🔍 Records Processed:*\n"
+            f"• Stocks: `{counters['stocks_processed']}`\n"
+            f"• Options: `{counters['options_processed']}`\n"
+            f"• Total: `{counters['stocks_processed'] + counters['options_processed']}`\n\n"
+            f"*🆕 New Records Added:*\n"
+            f"• Stocks: `{counters['stocks_inserted']}`\n"
+            f"• Options: `{counters['options_inserted']}`\n"
+            f"• Total: `{counters['stocks_inserted'] + counters['options_inserted']}`\n\n"
+            f"*🔗 Supabase:* <https://supabase.com/dashboard/project/uxpqahwmqpkgqlpzwmof/editor|View in Supabase>"
+        )
+        send_slack_message(msg)
+    logger.info(f"Processed file: {basename(file_path)}")
+
+def process_gcs_file(event, context):
+    """Entry point for Cloud Function"""
+    from google.cloud import storage
+    
+    if not BUCKET_NAME:
+        logger.error("BUCKET_NAME environment variable not set")
+        return
+    
+    # Get the file that triggered this function
+    file_name = event['name']
+    logger.info(f"Processing file: {file_name}")
+    
+    # Download the file to a temporary location
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(file_name)
+    
+    # Create a temporary file
+    temp_file = f"/tmp/{file_name}"
+    blob.download_to_filename(temp_file)
+    
+    try:
+        process_csv(temp_file)
+    finally:
+        # Clean up
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
 
 def main():
+    """Entry point for local testing"""
     if not CSV_FILE:
-        logger.error("No CSV_FILE environment variable specified.")
+        logger.error("No CSV_FILE environment variable specified for local testing.")
         return
     process_csv(CSV_FILE)
 
