@@ -41,8 +41,12 @@ resource "google_cloudfunctions2_function" "csv_reports_processor" {
     environment_variables = {
       BUCKET_NAME = google_storage_bucket.csv_reports_bucket.name
       SLACK_WEBHOOK_URL = var.slack_webhook_url
+      SUPABASE_URL = var.supabase_url
+      SUPABASE_API_KEY = var.supabase_api_key
     }
     max_instance_count = 3
+    ingress_settings = "ALLOW_ALL"
+    vpc_connector = null  # Explicitly set to null to use public internet
   }
 
   event_trigger {
