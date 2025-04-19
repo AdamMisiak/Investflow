@@ -93,6 +93,8 @@ def process_gcs_file(event, context):
         # Clean up
         if os.path.exists(temp_file):
             os.remove(temp_file)
+    
+    logger.info("✅ Cloud function execution completed successfully")
 
 def main():
     """Entry point for local testing"""
@@ -100,6 +102,7 @@ def main():
         logger.error("No CSV_FILE environment variable specified for local testing.")
         return
     process_csv(CSV_FILE)
+    logger.info("✅ Local execution completed successfully")
 
 if __name__ == "__main__":
     main()

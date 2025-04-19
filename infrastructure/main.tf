@@ -36,7 +36,8 @@ resource "google_cloudfunctions2_function" "csv_reports_processor" {
   }
 
   service_config {
-    available_memory    = "256M"
+    available_memory    = "512M"
+    timeout_seconds     = 600
     service_account_email = "investflow-function@${var.project_id}.iam.gserviceaccount.com"
     environment_variables = {
       BUCKET_NAME = google_storage_bucket.csv_reports_bucket.name

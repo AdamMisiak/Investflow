@@ -48,7 +48,6 @@ tf-destroy:
 deploy: build
 	@echo "Deploying function..."
 	cd $(INFRA_DIR) && \
-	terraform init && \
 	terraform apply \
 		-var="project_id=$(PROJECT_ID)" \
 		-var="bucket_name=$(BUCKET_NAME)" \
