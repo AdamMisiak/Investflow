@@ -22,10 +22,17 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
                 counters["stocks_processed"] += 1
                 
         raw_data = clean_nan(row.to_dict())
+        
+        # Filter only stock/equity or options records
+        asset_category = str(raw_data.get("Asset Category", "")).strip()
+        if asset_category not in ["Stocks", "Equity and Index Options"]:
+            logger.info(f"⏩ Skipping row with Asset Category: {asset_category}")
+            continue
 
         symbol = str(raw_data.get("Symbol", "")).strip()
         date_time_str = str(raw_data.get("Date/Time", "")).replace(",", "").strip()
         code_str = str(raw_data.get("Code", "")).strip()
+        currency = str(raw_data.get("Currency", "USD")).strip()  # Extract currency, default to USD
 
         # numeric fields
         quantity_str = str(raw_data.get("Quantity", "")).strip()
@@ -55,6 +62,7 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
                 code_str=code_str,
                 tx_type=tx_type,
                 side=side,
+                currency=currency,
                 raw_data=raw_data,
             )
             otx.append(rec)
@@ -71,6 +79,7 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
                 code_str=code_str,
                 tx_type=tx_type,
                 side=side,
+                currency=currency,
                 raw_data=raw_data,
             )
             stx.append(rec)

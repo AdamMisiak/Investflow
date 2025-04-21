@@ -29,11 +29,12 @@ def build_option_record(
     code_str,
     tx_type,
     side,
+    currency,
     raw_data
 ):
     """
     Builds a dictionary specifically for option transactions.
-    We do NOT store 'currency' or 'asset_category' here.
+    We do NOT store 'asset_category' here.
     We interpret side from sign of quantity externally; also open/close from code.
     """
     underlying, strike_price, expiration_date, opt_type = parse_option_symbol(symbol)
@@ -49,6 +50,7 @@ def build_option_record(
         "quantity": quantity,
         "price": trade_price,
         "fees": fees,
+        "currency": currency,
         "code": code_str.upper(),
         "type": tx_type,  # open/close
         "side": side,     # buy/sell

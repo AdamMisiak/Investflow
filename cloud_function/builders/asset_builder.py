@@ -8,6 +8,7 @@ def build_asset_record(
     code_str,
     tx_type,
     side,
+    currency,
     raw_data
 ):
     """
@@ -21,6 +22,7 @@ def build_asset_record(
         "quantity": quantity,
         "price": trade_price,
         "fees": fee,
+        "currency": currency,
         "code": code_str.upper(),
         "type": tx_type,
         "side": side,

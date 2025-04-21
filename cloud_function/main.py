@@ -46,8 +46,8 @@ def process_csv(file_path):
             option_transactions.extend(opt)
 
     all_tx = stock_transactions + option_transactions
-    # if all_tx:
-    #     write_to_google_sheets(all_tx)
+    if all_tx:
+        write_to_google_sheets(all_tx)
 
     # Slack message
     if SLACK_WEBHOOK_URL:
