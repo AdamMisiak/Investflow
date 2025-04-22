@@ -35,7 +35,7 @@ def write_to_google_sheets(data, sheet_name="Transactions"):
 
     # Define the columns we want to include in the sheet
     sheet_columns = [
-        "Date", "Category", "Side", "Ticker", "Quantity", "Price", "Fees", "Currency", "Value", "Full Value", "Type"
+        "Date", "Category", "Side", "Ticker", "Name", "Quantity", "Price", "Fees", "Currency", "Value", "Full Value", "Type"
     ]
     
     # Prepare data for Google Sheets with only the desired columns
@@ -46,10 +46,11 @@ def write_to_google_sheets(data, sheet_name="Transactions"):
         
         sheets_record = {
             "ID": record["transaction_id"],  # Keep for deduplication
-            "Date": record.get("executed_at", ""),
+            "Date": record.get("executed_at", "").split()[0],  # Only date part
             "Category": category,
             "Side": record.get("side", ""),
             "Ticker": record.get("ticker", ""),
+            "Name": "",  # Will be filled with formula
             "Quantity": record.get("quantity", ""),
             "Price": record.get("price", ""),
             "Fees": record.get("fees", ""),
@@ -76,4 +77,13 @@ def write_to_google_sheets(data, sheet_name="Transactions"):
         if worksheet.row_count < 1 or not worksheet.row_values(1):
             worksheet.append_row(header)
         worksheet.append_rows(rows_to_insert)
+        
+        # Add GoogleFinance formula for Name column
+        last_row = worksheet.row_count
+        for i in range(2, last_row + 1):  # Start from row 2 (after header)
+            ticker_cell = f"E{i}"  # Column E is Ticker
+            name_cell = f"F{i}"    # Column F is Name
+            formula = f'=GoogleFinance({ticker_cell},"name")'
+            worksheet.update_acell(name_cell, formula)
+            
         logger.info(f"✅ Inserted {len(rows_to_insert)} records into Google Sheet: {sheet_name}.")
