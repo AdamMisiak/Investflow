@@ -3,7 +3,7 @@ from utils.logger import logger
 from utils.helpers import generate_transaction_id
 from builders.asset_builder import build_asset_record
 from builders.option_builder import build_option_record
-from services.supabase_service import insert_to_supabase
+from services.supabase_service import insert_batch_to_supabase
 
 def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = None):
     """
@@ -11,6 +11,7 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
     """
     stx = []
     otx = []
+    batch_size = 100  # Process in batches of 100 records
 
     for idx, row in df.iterrows():
         logger.info(f"🔎 Processing {('Options' if is_option else 'Stock')} row {idx}")
@@ -66,8 +67,6 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
                 raw_data=raw_data,
             )
             otx.append(rec)
-            if insert_to_supabase("option_transactions", rec, tx_id):
-                if counters: counters["options_inserted"] += 1
         else:
             rec = build_asset_record(
                 tx_id=tx_id,
@@ -83,8 +82,22 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
                 raw_data=raw_data,
             )
             stx.append(rec)
-            if insert_to_supabase("asset_transactions", rec, tx_id):
-                if counters: counters["stocks_inserted"] += 1
+
+    # Process stock transactions in batches
+    if stx:
+        for i in range(0, len(stx), batch_size):
+            batch = stx[i:i + batch_size]
+            tx_ids = [rec["transaction_id"] for rec in batch]
+            inserted = insert_batch_to_supabase("asset_transactions", batch, tx_ids)
+            if counters: counters["stocks_inserted"] += inserted
+
+    # Process option transactions in batches
+    if otx:
+        for i in range(0, len(otx), batch_size):
+            batch = otx[i:i + batch_size]
+            tx_ids = [rec["transaction_id"] for rec in batch]
+            inserted = insert_batch_to_supabase("option_transactions", batch, tx_ids)
+            if counters: counters["options_inserted"] += inserted
 
     return stx, otx
 
