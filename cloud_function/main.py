@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils.logger import logger
-from parsers.multi_section_parser import parse_multi_section_csv
+from parsers.multi_section_parser import parse_multi_section_csv, extract_ending_cash_data
 from parsers.trade_parser import parse_trades_df
 from services.sheets_service import write_to_google_sheets
 from services.slack_service import send_slack_message
@@ -16,6 +16,10 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 def process_csv(file_path):
     sections = parse_multi_section_csv(file_path)
+
+    # Extract Ending Cash data
+    ending_cash = extract_ending_cash_data(sections)
+    logger.info(f"Ending Cash data: {ending_cash}")
 
     stock_transactions = []
     option_transactions = []
@@ -51,6 +55,14 @@ def process_csv(file_path):
 
     # Slack message
     if SLACK_WEBHOOK_URL:
+        # Add Ending Cash information to the Slack message
+        ending_cash_msg = "*💰 Ending Cash:*\n"
+        if ending_cash:
+            for currency, value in ending_cash.items():
+                ending_cash_msg += f"• {currency}: `{round(value, 2)}`\n"
+        else:
+            ending_cash_msg += "• No Ending Cash data found\n"
+        
         msg = (
             f"*📄 CSV File:* `{basename(file_path)}`\n\n"
             f"*🔍 Records Processed:*\n"
@@ -61,7 +73,9 @@ def process_csv(file_path):
             f"• Stocks: `{counters['stocks_inserted']}`\n"
             f"• Options: `{counters['options_inserted']}`\n"
             f"• Total: `{counters['stocks_inserted'] + counters['options_inserted']}`\n\n"
-            f"*🔗 Supabase:* <https://supabase.com/dashboard/project/uxpqahwmqpkgqlpzwmof/editor|View in Supabase>"
+            f"{ending_cash_msg}\n"
+            f"*🔗 Supabase:* <https://supabase.com/dashboard/project/uxpqahwmqpkgqlpzwmof/editor|View in Supabase>\n"
+            f"*📋 Google Sheet:* <https://docs.google.com/spreadsheets/d/1Ti9vSwPYyOHrNNsENgHva5m8X70fXut9qPJy5WkxWM4/edit?gid=0#gid=0|View in Google Sheet>\n"
         )
         send_slack_message(msg)
     logger.info(f"Processed file: {basename(file_path)}")

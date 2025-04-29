@@ -84,3 +84,65 @@ def build_df_from_header_and_rows(sec_key, header, rows):
     except Exception as e:
         logger.warning(f"⚠️ Could not parse section {sec_key}: {e}")
         return None
+
+def extract_ending_cash_data(sections):
+    """
+    Extracts all Ending Cash data from Cash Report sections.
+    
+    Args:
+        sections: Dictionary of parsed sections from parse_multi_section_csv
+        
+    Returns:
+        Dictionary with currency as key and latest value as value.
+        Example: {'PLN': 28048.41445, 'USD': -5993.121253923}
+    """
+    ending_cash_data = []
+    
+    # Find all Cash Report sections
+    cash_report_sections = [k for k in sections if k.split("_")[0] == "Cash Report"]
+    
+    for section_key in cash_report_sections:
+        df = sections[section_key]
+        
+        # Search for rows where the first column contains "Ending Cash"
+        if df is not None and len(df.columns) > 0:
+            try:
+                # Get the column names
+                first_col = df.columns[0]
+                
+                # Filter rows containing "Ending Cash"
+                ending_cash_rows = df[df[first_col] == "Ending Cash"]
+                
+                for _, row in ending_cash_rows.iterrows():
+                    # Look for columns that might contain currency info
+                    # The format seems to be: "Ending Cash, PLN, value" or "Ending Cash, USD, value"
+                    if len(row) >= 3:  # Need at least 3 columns
+                        # Try to determine if we have a currency column
+                        currency_col_idx = 1  # Assuming the second column has currency info
+                        value_col_idx = 2     # Assuming the third column has the value
+                        
+                        # Extract currency and value if available
+                        if pd.notna(row[currency_col_idx]) and pd.notna(row[value_col_idx]):
+                            currency = row[currency_col_idx]
+                            value = row[value_col_idx]
+                            
+                            # Try to convert value to float if it's a numeric string
+                            try:
+                                value = float(value)
+                            except (ValueError, TypeError):
+                                # If can't convert to float, keep as is
+                                pass
+                                
+                            ending_cash_data.append({
+                                "currency": currency,
+                                "value": value
+                            })
+            except Exception as e:
+                logger.warning(f"⚠️ Error extracting Ending Cash data from {section_key}: {e}")
+    
+    # Convert to dictionary with currency as key and latest value as value
+    result = {}
+    for item in ending_cash_data:
+        result[item["currency"]] = item["value"]
+        
+    return result

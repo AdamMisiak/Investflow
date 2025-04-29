@@ -67,22 +67,29 @@ def _get_columns() -> List[str]:
 def _get_existing_ids(worksheet: gspread.Worksheet, visible_cols_count: int) -> Set[str]:
     logger.info("🔍 Reading existing transaction IDs...")
     existing_ids = set()
-    hidden_id_col = visible_cols_count + 1  # ID column after visible columns
+    id_col = 1  # ID column is the first column (column A)
     
     try:
-        # Get all IDs from the hidden column
+        # Get all IDs from the first column
         if worksheet.row_count > 1:
-            id_column = worksheet.col_values(hidden_id_col)
+            logger.info(f"Checking for IDs in column {id_col} (first column)")
+            id_column = worksheet.col_values(id_col)
             # Skip header row if present
             existing_ids = set(id for id in id_column[1:] if id)
             logger.info(f"📊 Found {len(existing_ids)} existing transaction IDs")
+            if len(existing_ids) > 0:
+                # Log some sample IDs for debugging
+                sample_ids = list(existing_ids)[:3]
+                logger.info(f"Sample existing IDs: {sample_ids}")
+        else:
+            logger.info("Worksheet has no rows, no IDs to read")
     except Exception as e:
         logger.error(f"❌ Error reading transaction IDs: {e}")
     
     # Ensure worksheet has headers if it's empty
     if worksheet.row_count < 1:
         try:
-            header_row = _get_columns() + ["_transaction_id"]
+            header_row = ["_transaction_id"] + _get_columns()
             worksheet.append_row(header_row)
             logger.info(f"🏷️ Added header row with {len(header_row)} columns to empty worksheet")
             time.sleep(1)  # Allow time for update
@@ -95,8 +102,6 @@ def _format_option_expiration(expiration_date: str) -> str:
     if not expiration_date:
         return ""
     
-    # Log the original format for debugging
-    logger.info(f"🔍 Parsing expiration date: {expiration_date}")
     
     try:
         # Handle special format like "04APR25"
@@ -163,51 +168,61 @@ def _prepare_new_records(
 ) -> List[List[Any]]:
     logger.info(f"🔄 Processing {len(data)} transactions...")
     new_records = []
+    processed_ids = set()  # Track IDs we've processed in this batch
     
     for record in data:
         tx_id = record["transaction_id"]
-        if tx_id not in existing_ids:
-            # Determine if this is an option record
-            is_option = "option_type" in record and record["option_type"]
-            category = "Options" if is_option else "Stocks"
+        # Skip if already exists in sheet OR already processed in this batch
+        if tx_id in existing_ids or tx_id in processed_ids:
+            logger.info(f"🔄 Skipping existing transaction ID: {tx_id}")
+            continue
             
-            # Build row with values in the correct order
-            row = []
-            row.append(tx_id)
-            for col in columns:
-                if col == "Date":
-                    row.append(record.get("executed_at", "").split()[0])
-                elif col == "Category":
-                    row.append(category)
-                elif col == "Name":
-                    row.append("")  # Empty Name column as requested
-                elif col == "Currency":
-                    row.append(record.get("currency", "USD"))
-                elif col == "Full Value":
-                    row.append(record.get("full_value", ""))
-                # Option-specific columns
-                elif col == "Option Type" and is_option:
-                    row.append(record.get("option_type", "").upper())  # PUT/CALL
-                elif col == "Option Strategy":
-                    row.append("")  # Empty for now as requested
-                elif col == "Option Expiration Date" and is_option:
-                    row.append(_format_option_expiration(record.get("expiration_date", "")))
-                elif col == "Option Strike Price" and is_option:
-                    row.append(record.get("strike_price", ""))
-                elif col == "Option Premium" and is_option:
-                    # For premium, positive means received (credit), negative means paid (debit)
-                    premium = float(record.get("value", 0) or 0)
-                    row.append(premium)
-                elif col == "Option Full Name" and is_option:
-                    row.append(_format_option_full_name(record))
-                elif col.startswith("Option") and not is_option:
-                    row.append("")  # Empty for non-option records
-                else:
-                    # For other columns, use lowercase column name as the key
-                    key = col.lower()
-                    row.append(record.get(key, ""))
-            
-            new_records.append(row)
+        # Add to processed set to prevent duplicates within the batch
+        processed_ids.add(tx_id)
+        
+        # Determine if this is an option record
+        is_option = "option_type" in record and record["option_type"]
+        category = "Options" if is_option else "Stocks"
+        
+        # Build row with values in the correct order
+        row = []
+        # Add transaction ID as the FIRST element
+        row.append(tx_id)
+        
+        for col in columns:
+            if col == "Date":
+                row.append(record.get("executed_at", "").split()[0])
+            elif col == "Category":
+                row.append(category)
+            elif col == "Name":
+                row.append("")  # Empty Name column as requested
+            elif col == "Currency":
+                row.append(record.get("currency", "USD"))
+            elif col == "Full Value":
+                row.append(record.get("full_value", ""))
+            # Option-specific columns
+            elif col == "Option Type" and is_option:
+                row.append(record.get("option_type", "").upper())  # PUT/CALL
+            elif col == "Option Strategy":
+                row.append("")  # Empty for now as requested
+            elif col == "Option Expiration Date" and is_option:
+                row.append(_format_option_expiration(record.get("expiration_date", "")))
+            elif col == "Option Strike Price" and is_option:
+                row.append(record.get("strike_price", ""))
+            elif col == "Option Premium" and is_option:
+                # For premium, positive means received (credit), negative means paid (debit)
+                premium = float(record.get("value", 0) or 0)
+                row.append(premium)
+            elif col == "Option Full Name" and is_option:
+                row.append(_format_option_full_name(record))
+            elif col.startswith("Option") and not is_option:
+                row.append("")  # Empty for non-option records
+            else:
+                # For other columns, use lowercase column name as the key
+                key = col.lower()
+                row.append(record.get(key, ""))
+        
+        new_records.append(row)
     
     logger.info(f"🆕 Found {len(new_records)} new transactions to add")
     return new_records
