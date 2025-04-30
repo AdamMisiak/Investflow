@@ -2,11 +2,11 @@ import os
 from os.path import basename
 from dotenv import load_dotenv
 load_dotenv()
-
+from datetime import datetime
 from utils.logger import logger
 from parsers.multi_section_parser import parse_multi_section_csv, extract_ending_cash_data
 from parsers.trade_parser import parse_trades_df
-from services.sheets_service import write_to_google_sheets
+from services.sheets_service import write_to_google_sheets, write_cash_reports
 from services.slack_service import send_slack_message
 
 # Environment variables
@@ -20,6 +20,30 @@ def process_csv(file_path):
     # Extract Ending Cash data
     ending_cash = extract_ending_cash_data(sections)
     logger.info(f"Ending Cash data: {ending_cash}")
+
+    # Write ending cash data to Cash sheet
+    if ending_cash:
+        file_name = basename(CSV_FILE)
+        date_str = file_name.split('_')[-1].split('.')[0]  # Get '20250423'
+        from datetime import datetime
+    
+        csv_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+
+        cash_data = []
+        
+        for currency, value in ending_cash.items():
+            # Skip "Base Currency Summary" entries
+            if currency == "Base Currency Summary":
+                continue
+                
+            cash_data.append({
+                "date": csv_date,
+                "currency": currency,
+                "value": round(value, 2)
+            })
+        
+        # Write to Cash sheet
+        write_cash_reports(cash_data)
 
     stock_transactions = []
     option_transactions = []

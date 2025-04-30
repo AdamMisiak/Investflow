@@ -30,6 +30,36 @@ def write_to_google_sheets(data: List[Dict[str, Any]], sheet_name: str = "Transa
     else:
         logger.info("🔄 No new records to insert.")
 
+def write_cash_reports(data: List[Dict[str, Any]], sheet_name: str = "Cash") -> None:
+    """
+    Write cash reports to a dedicated Cash sheet with columns: Date, Currency, Value
+    Ensures no duplicate entries are added based on a unique composite key of Date+Currency
+    
+    Args:
+        data: List of dictionaries with date, currency, and value keys
+        sheet_name: Name of the sheet to write to (default: "Cash")
+    """
+    if not _validate_config():
+        return
+        
+    # Connect and get worksheet
+    worksheet = _get_worksheet(sheet_name)
+    if not worksheet:
+        return
+    
+    # Define cash columns
+    cash_columns = ["Date", "Currency", "Value"]
+    
+    # Get existing entries as composite keys (date+currency)
+    existing_entries = _get_existing_cash_entries(worksheet)
+    
+    # Process and insert new records
+    new_records = _prepare_new_cash_records(data, existing_entries, cash_columns)
+    if new_records:
+        _insert_records(worksheet, new_records)
+    else:
+        logger.info("🔄 No new cash reports to insert.")
+
 def _validate_config() -> bool:
     if not GOOGLE_SHEETS_CREDENTIALS_FILE or not GOOGLE_SHEET_ID:
         logger.warning("⚠️ Missing Google Sheets configuration.")
@@ -270,3 +300,92 @@ def _insert_records(worksheet: gspread.Worksheet, records: List[List[Any]]) -> N
         logger.info(f"✅ Successfully inserted all {successful_inserts} new transactions")
     else:
         logger.info(f"⚠️ Inserted {successful_inserts} out of {len(records)} transactions")
+
+def _get_existing_cash_entries(worksheet: gspread.Worksheet) -> Set[str]:
+    """Get existing cash entries as composite keys (date+currency)"""
+    logger.info("🔍 Reading existing cash entries...")
+    existing_entries = set()
+    
+    try:
+        # Ensure worksheet has headers if it's empty
+        if worksheet.row_count < 1:
+            try:
+                header_row = ["Date", "Currency", "Value"]
+                worksheet.append_row(header_row)
+                logger.info(f"🏷️ Added header row to empty Cash worksheet")
+                time.sleep(1)  # Allow time for update
+                return existing_entries
+            except Exception as e:
+                logger.error(f"❌ Error adding header row: {e}")
+                return existing_entries
+        
+        # Get all data
+        all_rows = worksheet.get_all_values()
+        
+        # Skip header row if present
+        if len(all_rows) > 1:
+            data_rows = all_rows[1:]  # Skip header
+            for row in data_rows:
+                if len(row) >= 2 and row[0] and row[1]:  # Date and Currency are present
+                    # Create composite key from date and currency
+                    composite_key = f"{row[0]}:{row[1]}"
+                    existing_entries.add(composite_key)
+            
+            logger.info(f"📊 Found {len(existing_entries)} existing cash entries")
+        else:
+            logger.info("Worksheet has only headers, no entries to read")
+    
+    except Exception as e:
+        logger.error(f"❌ Error reading cash entries: {e}")
+    
+    return existing_entries
+
+def _prepare_new_cash_records(
+    data: List[Dict[str, Any]], 
+    existing_entries: Set[str],
+    columns: List[str]
+) -> List[List[Any]]:
+    """Prepare new cash records, filtering out any duplicates"""
+    logger.info(f"🔄 Processing {len(data)} cash reports...")
+    new_records = []
+    processed_keys = set()  # Track unique keys we've processed in this batch
+    
+    for record in data:
+        # Extract data fields
+        date = record.get("date", "")
+        currency = record.get("currency", "USD")
+        value = record.get("value", 0)
+        
+        # Skip records with missing required fields
+        if not date:
+            logger.warning(f"⚠️ Skipping cash record with missing date: {record}")
+            continue
+        
+        # Create composite key
+        composite_key = f"{date}:{currency}"
+        
+        # Skip if already exists in sheet OR already processed in this batch
+        if composite_key in existing_entries or composite_key in processed_keys:
+            logger.info(f"🔄 Skipping existing cash entry: {composite_key}")
+            continue
+            
+        # Add to processed set to prevent duplicates within the batch
+        processed_keys.add(composite_key)
+        
+        # Build row with values in the correct order
+        row = []
+        for col in columns:
+            if col == "Date":
+                # Ensure date is added without leading apostrophe
+                row.append(date)
+            elif col == "Currency":
+                row.append(currency)
+            elif col == "Value":
+                row.append(value)
+            else:
+                row.append("")  # Empty for any unexpected columns
+        
+        new_records.append(row)
+    
+    logger.info(f"🆕 Found {len(new_records)} new cash entries to add")
+    return new_records
