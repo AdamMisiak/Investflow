@@ -48,7 +48,13 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
         quantity = raw_qty
 
         code_upper = code_str.upper()
-        tx_type = "open" if code_upper == "O" else "close"
+        if code_upper == "O":
+            tx_type = "open"
+        elif "EP" in code_upper:
+            tx_type = "expired"
+        else:
+            tx_type = "close"
+        # tx_type = "open" if code_upper == "O" else "close"
 
         tx_id = generate_transaction_id(date_time_str, symbol, quantity, trade_price, code_str)
 

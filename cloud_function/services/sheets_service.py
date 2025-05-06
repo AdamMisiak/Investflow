@@ -178,15 +178,14 @@ def _format_option_full_name(record: Dict[str, Any]) -> str:
     
     try:
         # Get option details
-        expiration = _format_option_expiration(record.get("expiration_date", ""))
+        expiration = record.get("expiration_date", "")
         strike = record.get("strike_price", "")
         option_type = record.get("option_type", "").upper()
-        side = record.get("side", "").upper()
+        side = record.get("side", "")
         
-        year_suffix = "'" if expiration and len(expiration) > 5 else ""
         strike_str = f"{strike}$" if strike else ""
         
-        return f"{ticker} {expiration}{year_suffix} {strike_str} {side} {option_type}".strip()
+        return f"{ticker} {expiration} @ {strike_str} {side} {option_type}".strip()
     except Exception as e:
         logger.warning(f"⚠️ Error formatting option name: {e}")
         return ""
