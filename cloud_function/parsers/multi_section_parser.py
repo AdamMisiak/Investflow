@@ -151,3 +151,33 @@ def _build_df_from_header_and_rows(sec_key, header, rows):
     except Exception as e:
         logger.warning(f"⚠️ Could not parse section {sec_key}: {e}")
         return None
+
+
+def validate_required_sections(sections):
+    """
+    Validate that required sections exist in the parsed data.
+    
+    Args:
+        sections (dict): Dictionary with section names as keys
+        
+    Returns:
+        tuple: (is_valid, missing_sections) where is_valid is a boolean and
+               missing_sections is a list of missing section types
+    """
+    required_section_types = ["Trades", "Cash Report"]
+    missing_sections = []
+    
+    # Check for required section types
+    for section_type in required_section_types:
+        # Look for any sections starting with this type
+        matching_sections = [s for s in sections if s.startswith(section_type)]
+        if not matching_sections:
+            missing_sections.append(section_type)
+            logger.warning(f"⚠️ Required section '{section_type}' not found in parsed data")
+    
+    is_valid = len(missing_sections) == 0
+    
+    if not is_valid:
+        logger.warning(f"❌ Missing required sections: {', '.join(missing_sections)}")
+    
+    return is_valid, missing_sections
