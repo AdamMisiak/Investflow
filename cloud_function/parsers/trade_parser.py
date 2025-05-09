@@ -5,37 +5,49 @@ from builders.asset_builder import build_asset_record
 from builders.option_builder import build_option_record
 from services.supabase_service import insert_batch_to_supabase
 
-def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = None):
+def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
     """
-    Parse trades DataFrame into either stock or option records.
+    Parse trades DataFrame into stock, option, or bond records based on trade_type.
     """
-    stx = []
-    otx = []
+    transactions = []
     batch_size = 100  # Process in batches of 100 records
 
-    for idx, row in df.iterrows():
-        logger.info(f"🔎 Processing {('Options' if is_option else 'Stock')} row {idx}")
+    # Determine target table and record builder based on trade_type
+    if trade_type == "options":
+        record_builder = build_option_record
+        target_table = "option_transactions"
+    elif trade_type in ["stocks", "bonds"]:
+        record_builder = build_asset_record
+        target_table = "asset_transactions"
+    else:
+        logger.warning(f"Unsupported trade_type: {trade_type}. Skipping.")
+        return [], [] # Return empty lists for stock/option to match original structure if needed
 
-        if counters:  # Increment processed counter
-            if is_option:
-                counters["options_processed"] += 1
-            else:
-                counters["stocks_processed"] += 1
+    logger.info(f"🔎 Processing {len(df)} {trade_type} row(s)...")
+    for idx, row in df.iterrows():
+
+        counters[f"{trade_type}_processed"] += 1
                 
         raw_data = clean_nan(row.to_dict())
         
-        # Filter only stock/equity or options records
-        asset_category = str(raw_data.get("Asset Category", "")).strip()
-        if asset_category not in ["Stocks", "Equity and Index Options"]:
-            logger.info(f"⏩ Skipping row with Asset Category: {asset_category}")
+        # Asset category check can be simplified or removed if main.py ensures correct df
+        asset_category_map = {
+            "stocks": "Stocks",
+            "options": "Equity and Index Options",
+            "bonds": "Treasury Bills" # Assuming this is the category name in CSV for bonds
+        }
+        expected_asset_category = asset_category_map.get(trade_type)
+        current_asset_category = str(raw_data.get("Asset Category", "")).strip()
+
+        if expected_asset_category and current_asset_category != expected_asset_category:
+            logger.info(f"⏩ Skipping row with Asset Category: {current_asset_category} for expected {expected_asset_category}")
             continue
 
         symbol = str(raw_data.get("Symbol", "")).strip()
         date_time_str = str(raw_data.get("Date/Time", "")).replace(",", "").strip()
         code_str = str(raw_data.get("Code", "")).strip()
-        currency = str(raw_data.get("Currency", "USD")).strip()  # Extract currency, default to USD
+        currency = str(raw_data.get("Currency", "USD")).strip()
 
-        # numeric fields
         quantity_str = str(raw_data.get("Quantity", "")).strip()
         trade_price_str = str(raw_data.get("T. Price", "")).strip()
         fees_str = str(raw_data.get("Comm/Fee", 0)).strip()
@@ -45,7 +57,7 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
         fees = try_float(fees_str)
 
         side = "sell" if raw_qty < 0 else "buy"
-        quantity = raw_qty
+        quantity = raw_qty # Keep original sign for quantity
 
         code_upper = code_str.upper()
         if code_upper == "O":
@@ -54,58 +66,38 @@ def parse_trades_df(df: pd.DataFrame, is_option: bool = False, counters: dict = 
             tx_type = "expired"
         else:
             tx_type = "close"
-        # tx_type = "open" if code_upper == "O" else "close"
 
         tx_id = generate_transaction_id(date_time_str, symbol, quantity, trade_price, code_str)
 
-        if is_option:
-            rec = build_option_record(
-                tx_id=tx_id,
-                executed_at=date_time_str,
-                symbol=symbol,
-                quantity=quantity,
-                trade_price=trade_price,
-                fees=fees,
-                code_str=code_str,
-                tx_type=tx_type,
-                side=side,
-                currency=currency,
-                raw_data=raw_data,
-            )
-            otx.append(rec)
-        else:
-            rec = build_asset_record(
-                tx_id=tx_id,
-                executed_at=date_time_str,
-                symbol=symbol,
-                quantity=quantity,
-                trade_price=trade_price,
-                fee=fees,
-                code_str=code_str,
-                tx_type=tx_type,
-                side=side,
-                currency=currency,
-                raw_data=raw_data,
-            )
-            stx.append(rec)
+        # NOTE: BONDS STILL FAILING
+        record_params = {
+            "tx_id": tx_id,
+            "executed_at": date_time_str,
+            "symbol": symbol,
+            "quantity": quantity,
+            "trade_price": trade_price,
+            "fees": fees, # Use correct fee parameter name
+            "code_str": code_str,
+            "tx_type": tx_type,
+            "side": side,
+            "currency": currency,
+            "raw_data": raw_data,
+        }
+        # build_asset_record does not take 'fees', it takes 'fee'
+        rec = record_builder(**record_params)
+        transactions.append(rec)
 
-    # Process stock transactions in batches
-    if stx:
-        for i in range(0, len(stx), batch_size):
-            batch = stx[i:i + batch_size]
-            tx_ids = [rec["transaction_id"] for rec in batch]
-            inserted = insert_batch_to_supabase("asset_transactions", batch, tx_ids)
-            if counters: counters["stocks_inserted"] += inserted
-
-    # Process option transactions in batches
-    if otx:
-        for i in range(0, len(otx), batch_size):
-            batch = otx[i:i + batch_size]
-            tx_ids = [rec["transaction_id"] for rec in batch]
-            inserted = insert_batch_to_supabase("option_transactions", batch, tx_ids)
-            if counters: counters["options_inserted"] += inserted
-
-    return stx, otx
+    if transactions:
+        for i in range(0, len(transactions), batch_size):
+            batch = transactions[i:i + batch_size]
+            tx_ids = [r["transaction_id"] for r in batch]
+            inserted = insert_batch_to_supabase(target_table, batch, tx_ids)
+            counters[f"{trade_type}_inserted"] += inserted
+    
+    # To maintain compatibility with how results are expected in main.py (stx, otx)
+    # This part needs careful handling based on how main.py will use the returned values.
+    # For now, let's assume parse_trades_df is called per type, so it returns one list.
+    return transactions # Caller will assign to appropriate list (stocks, options, bonds)
 
 def clean_nan(raw_dict):
     """

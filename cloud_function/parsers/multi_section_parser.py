@@ -55,6 +55,24 @@ def _read_csv_to_temp_sections(file_path):
     return sections_temp
 
 
+def _finalize_subsection(parsed_sections, section, subsection_counter, header, rows):
+    """
+    Determines asset type if applicable and saves the current subsection.
+    """
+    if not header or not rows:
+        return
+
+    asset_type_for_subsection = None
+    if section.startswith("Trades") and rows:
+        first_data_row_fields = rows[0]
+        if len(first_data_row_fields) > 1:  # Asset Category is the 2nd field in tail
+            asset_type_for_subsection = first_data_row_fields[1].strip()
+        else:
+            logger.warning(f"Could not determine asset type for Trades section '{section}' (block {subsection_counter[section]}) due to insufficient columns in first data row.")
+    
+    _save_subsection(parsed_sections, section, subsection_counter, header, rows, asset_type_for_subsection)
+    subsection_counter[section] += 1
+
 def _process_temp_sections_to_dataframes(sections_temp):
     """
     Process the temporary section data into DataFrames.
@@ -66,7 +84,7 @@ def _process_temp_sections_to_dataframes(sections_temp):
         dict: Dictionary with section names as keys and DataFrames as values
     """
     parsed_sections = {}
-    subsection_counter = defaultdict(int)
+    subsection_counter = defaultdict(int) # Counter for blocks within the same original section name
     
     for section, items in sections_temp.items():
         current_header = None
@@ -74,10 +92,8 @@ def _process_temp_sections_to_dataframes(sections_temp):
         
         for (row_type, row_data) in items:
             if row_type == "Header":
-                # Save previous subsection if exists
-                if current_header and current_rows:
-                    _save_subsection(parsed_sections, section, subsection_counter, current_header, current_rows)
-                    subsection_counter[section] += 1
+                # Finalize previous subsection if it exists
+                _finalize_subsection(parsed_sections, section, subsection_counter, current_header, current_rows)
                 
                 # Start new subsection
                 current_header = row_data
@@ -85,43 +101,51 @@ def _process_temp_sections_to_dataframes(sections_temp):
             elif row_type == "Data" and current_header is not None:
                 current_rows.append(row_data)
         
-        # Save the last subsection
-        if current_header and current_rows:
-            _save_subsection(parsed_sections, section, subsection_counter, current_header, current_rows)
-            subsection_counter[section] += 1
+        # Finalize the last subsection for the current section
+        _finalize_subsection(parsed_sections, section, subsection_counter, current_header, current_rows)
             
     return parsed_sections
 
 
-def _save_subsection(parsed_sections, section, subsection_counter, header, rows):
+def _save_subsection(parsed_sections, section, subsection_counter, header, rows, asset_type=None):
     """
     Create a DataFrame from header and rows and save it to parsed_sections.
     
     Args:
         parsed_sections (dict): Dictionary to save the resulting DataFrame
-        section (str): The section name
-        subsection_counter (defaultdict): Counter for subsections
+        section (str): The section name (e.g., "Trades")
+        subsection_counter (defaultdict): Counter for subsections of the original section name
         header (list): Column names
         rows (list): Data rows
+        asset_type (str, optional): The determined asset type for this subsection. Defaults to None.
     """
-    subsec_key = _make_subsection_key(section, subsection_counter[section])
+    # subsection_counter[section] gives the current block number for the original 'section'
+    subsec_key = _make_subsection_key(section, subsection_counter[section], asset_type)
     df = _build_df_from_header_and_rows(subsec_key, header, rows)
     if df is not None:
         parsed_sections[subsec_key] = df
 
 
-def _make_subsection_key(section, counter):
+def _make_subsection_key(section, counter, asset_type=None):
     """
-    Create a key for a subsection based on section name and counter.
+    Create a key for a subsection based on section name, counter, and asset type.
     
     Args:
-        section (str): Section name
-        counter (int): Subsection counter
+        section (str): Section name (e.g., "Trades")
+        counter (int): Subsection counter for the original section name
+        asset_type (str, optional): Type of the asset (e.g., 'Stocks', 'Equity and Index Options'). Defaults to None.
         
     Returns:
         str: Subsection key
     """
-    return f"{section}" if counter == 0 else f"{section} {counter}"
+    base_name_to_use = section
+    if section.startswith("Trades") and asset_type and asset_type.strip():
+        # Form a more specific base name using the asset type
+        base_name_to_use = f"{section} {asset_type.strip()}"
+        return base_name_to_use
+    
+    # Append counter if it's not the first block under this name configuration
+    return f"{base_name_to_use}" if counter == 0 else f"{base_name_to_use} {counter}"
 
 
 def _build_df_from_header_and_rows(sec_key, header, rows):
@@ -154,16 +178,6 @@ def _build_df_from_header_and_rows(sec_key, header, rows):
 
 
 def validate_required_sections(sections):
-    """
-    Validate that required sections exist in the parsed data.
-    
-    Args:
-        sections (dict): Dictionary with section names as keys
-        
-    Returns:
-        tuple: (is_valid, missing_sections) where is_valid is a boolean and
-               missing_sections is a list of missing section types
-    """
     required_section_types = ["Trades", "Cash Report"]
     missing_sections = []
     

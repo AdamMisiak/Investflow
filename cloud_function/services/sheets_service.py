@@ -37,7 +37,7 @@ def write_to_google_sheets(data: List[Dict[str, Any]], sheet_name: str = "Transa
     if new_records:
         _insert_records(worksheet, new_records)
     else:
-        logger.info("🔄 No new transactions to insert.")
+        logger.info("🔄 [Google Sheet] No new transactions to insert.")
 
 
 def write_cash_reports(data: List[Dict[str, Any]], sheet_name: str = "Cash") -> None:
@@ -406,7 +406,7 @@ def _get_existing_cash_entries(worksheet: gspread.Worksheet) -> Set[str]:
                     composite_key = f"{row[0]}:{row[1]}"
                     existing_entries.add(composite_key)
             
-            logger.info(f"📊 Found {len(existing_entries)} existing cash entries")
+            # logger.info(f"📊 Found {len(existing_entries)} existing cash entries")
         else:
             logger.info("⚠️ Worksheet has only headers, no entries to read")
     
@@ -432,7 +432,7 @@ def _prepare_new_cash_records(
     Returns:
         List of new cash records to insert
     """
-    logger.info(f"🔄 Processing {len(data)} cash records...")
+    logger.info(f"🔎 Processing {len(data)} cash record(s)...")
     new_records = []
     processed_keys = set()  # Track unique keys we've processed in this batch
     
@@ -461,7 +461,7 @@ def _prepare_new_cash_records(
         row = _format_cash_row(record, columns)
         new_records.append(row)
     
-    logger.info(f"ℹ️  Found {len(new_records)} new cash entries to add")
+    logger.info(f"ℹ️  [Google Sheet] Found {len(new_records)} new cash entries to add")
     return new_records
 
 

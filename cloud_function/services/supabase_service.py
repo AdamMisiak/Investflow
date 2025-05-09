@@ -54,7 +54,7 @@ def insert_batch_to_supabase(table, data_list, transaction_ids):
                     new_data.append(data)
             
             if not new_data:
-                logger.info(f"ℹ️ Chunk {i//chunk_size + 1} already exists in {table}. Skipping.")
+                logger.info(f"ℹ️  [Supabase] Chunk {i//chunk_size + 1} already exists in {table}. Skipping.")
                 continue
 
             # Insert new records in batch
@@ -67,12 +67,12 @@ def insert_batch_to_supabase(table, data_list, transaction_ids):
             
             inserted_count = len(new_data)
             total_inserted += inserted_count
-            logger.info(f"✅ Inserted {inserted_count} records in chunk {i//chunk_size + 1} into {table}.")
+            logger.info(f"✅ [Supabase] Inserted {inserted_count} records in chunk {i//chunk_size + 1} into {table}.")
             
         except requests.exceptions.RequestException as e:
             logger.error(f"🚨 Network error while processing chunk {i//chunk_size + 1}: {str(e)}")
             continue
 
     if total_inserted > 0:
-        logger.info(f"✅ Total inserted records: {total_inserted}")
+        logger.info(f"✅ [Supabase] Total inserted records: {total_inserted}")
     return total_inserted
