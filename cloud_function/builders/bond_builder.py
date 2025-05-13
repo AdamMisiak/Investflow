@@ -1,4 +1,4 @@
-def build_asset_record(
+def build_bond_record(
     tx_id,
     executed_at,
     asset_category,
@@ -14,7 +14,6 @@ def build_asset_record(
     raw_data
 ):
     """
-    Builds a dictionary for asset (stock) transactions.
     """
     # value = quantity * trade_price * -1
     return {

@@ -3,12 +3,10 @@ from utils.logger import logger
 from utils.helpers import generate_transaction_id
 from builders.asset_builder import build_asset_record
 from builders.option_builder import build_option_record
+from builders.bond_builder import build_bond_record
 from services.supabase_service import insert_batch_to_supabase
 
 def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
-    """
-    Parse trades DataFrame into stock, option, or bond records based on trade_type.
-    """
     transactions = []
     batch_size = 100  # Process in batches of 100 records
 
@@ -16,8 +14,11 @@ def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
     if trade_type == "options":
         record_builder = build_option_record
         target_table = "option_transactions"
-    elif trade_type in ["stocks", "bonds"]:
+    elif trade_type == "stocks":
         record_builder = build_asset_record
+        target_table = "asset_transactions"
+    elif trade_type == "bonds":
+        record_builder = build_bond_record
         target_table = "asset_transactions"
     else:
         logger.warning(f"Unsupported trade_type: {trade_type}. Skipping.")
@@ -48,12 +49,14 @@ def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
         code_str = str(raw_data.get("Code", "")).strip()
         currency = str(raw_data.get("Currency", "USD")).strip()
 
-        quantity_str = str(raw_data.get("Quantity", "")).strip()
+        quantity_str = str(raw_data.get("Quantity", "")).strip().replace(",", "")
         trade_price_str = str(raw_data.get("T. Price", "")).strip()
+        value_str = str(raw_data.get("Proceeds", "")).strip()
         fees_str = str(raw_data.get("Comm/Fee", 0)).strip()
 
         raw_qty = try_float(quantity_str)
         trade_price = try_float(trade_price_str)
+        value = try_float(value_str)
         fees = try_float(fees_str)
 
         side = "sell" if raw_qty < 0 else "buy"
@@ -69,10 +72,10 @@ def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
 
         tx_id = generate_transaction_id(date_time_str, symbol, quantity, trade_price, code_str)
 
-        # NOTE: BONDS STILL FAILING
         record_params = {
             "tx_id": tx_id,
             "executed_at": date_time_str,
+            "asset_category": trade_type.capitalize(),
             "symbol": symbol,
             "quantity": quantity,
             "trade_price": trade_price,
@@ -80,6 +83,7 @@ def parse_trades_df(df: pd.DataFrame, trade_type: str, counters: dict):
             "code_str": code_str,
             "tx_type": tx_type,
             "side": side,
+            "value": value,
             "currency": currency,
             "raw_data": raw_data,
         }

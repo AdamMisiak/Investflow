@@ -282,7 +282,7 @@ def _format_transaction_row(
     is_option: bool
 ) -> List[Any]:
     """Format a single transaction record into a row."""
-    category = "Options" if is_option else "Stocks"
+    # Determine the category based on record type
     
     # Build row with transaction ID as the first element
     row = [tx_id]
@@ -291,7 +291,7 @@ def _format_transaction_row(
         if col == "Date":
             row.append(record.get("executed_at", "").split()[0])
         elif col == "Category":
-            row.append(category)
+            row.append(record.get("asset_category", ""))
         elif col == "Name":
             row.append("")  # Empty Name column as requested
         elif col == "Currency":

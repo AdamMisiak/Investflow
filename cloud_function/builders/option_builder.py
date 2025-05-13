@@ -22,6 +22,7 @@ def parse_option_symbol(symbol):
 def build_option_record(
     tx_id,
     executed_at,
+    asset_category,
     symbol,
     quantity,
     trade_price,
@@ -29,6 +30,7 @@ def build_option_record(
     code_str,
     tx_type,
     side,
+    value,
     currency,
     raw_data
 ):
@@ -38,11 +40,12 @@ def build_option_record(
     We interpret side from sign of quantity externally; also open/close from code.
     """
     underlying, strike_price, expiration_date, opt_type = parse_option_symbol(symbol)
-    value = quantity * trade_price * 100.0 * -1
+    # value = quantity * trade_price * 100.0 * -1
 
     return {
         "transaction_id": tx_id,
         "executed_at": executed_at,
+        "asset_category": asset_category,
         "ticker": underlying,
         "option_type": opt_type,
         "strike_price": strike_price,
